@@ -1,16 +1,17 @@
 import Lib
-import Test
+import Test as T
 
 testEq :: Value -> Value -> Result
-testEq input expected = test (show input) (eval' input == expected)
+testEq input expected = T.test (show input) (eval' input == expected)
 
 
 
 
 main :: IO ()
-main = runTests
+main = T.runTests
   [ testEq icomb icomb
   , testEq scomb scomb
   , testEq kcomb kcomb
   , testEq (Apply icomb icomb)  icomb
+  , testEq (Apply icomb kcomb)  icomb
   ]

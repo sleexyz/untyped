@@ -12,18 +12,6 @@ import qualified Data.Map.Lazy as Map
 import qualified Data.Set as Set
 import Debug.Trace
 
--- |> Todo: move to Kinds
--- data Type where
---   TInt :: Type
---   TFunc :: Type -> Type -> Type
-
- -- data Value t where
- --   Var   :: Name -> Value t
- --   Lambda :: Name -> Value t -> Value t
- --   VPrim:: Name -> Value t -> Value t
- --   VConst :: PrimVal -> Value t
- --   Free :: Name -> Value t
-
 data PrimVal = PrimInt Int
              deriving (Show, Eq, Ord)
 
@@ -37,7 +25,6 @@ data Value =
   | Apply Value  Value
   | Free Name
     deriving (Show, Eq)
-
 
 
 data Context = Context (Map.Map Name Value) (Set.Set Name)
@@ -56,11 +43,6 @@ defaultContext :: Context
 defaultContext = Context (Map.fromList
                            [
                            ]) (Set.fromList [])
-
-
--- sorry :: forall a. a
--- sorry = error "didn't work yo"
-
 
 
 
