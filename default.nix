@@ -4,7 +4,7 @@ let
 
   inherit (nixpkgs) pkgs;
 
-  f = { mkDerivation, base, containers, stdenv }:
+  f = { mkDerivation, ansi-terminal, base, containers, stdenv }:
       mkDerivation {
         pname = "untyped";
         version = "0.1.0.0";
@@ -13,7 +13,7 @@ let
         isExecutable = true;
         libraryHaskellDepends = [ base containers ];
         executableHaskellDepends = [ base ];
-        testHaskellDepends = [ base ];
+        testHaskellDepends = [ ansi-terminal base ];
         homepage = "http://github.com/sleexyz/untyped#readme";
         description = "Initial project template from stack";
         license = stdenv.lib.licenses.bsd3;
