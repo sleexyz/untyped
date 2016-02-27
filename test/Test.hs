@@ -5,15 +5,10 @@ module Test ( Fail,
               runTests
             ) where
 
-
 import System.Console.ANSI
-
-
 
 color :: Color -> String -> String
 color c str = setSGRCode [SetColor Foreground Vivid c] ++  str ++ setSGRCode [Reset]
-
-
 
  -- DIY Testing suite
  -- I really just reinvented Either

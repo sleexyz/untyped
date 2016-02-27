@@ -1,16 +1,24 @@
+{-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE GADTs               #-}
+{-# LANGUAGE ImpredicativeTypes  #-}
+{-# LANGUAGE KindSignatures      #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE ImpredicativeTypes #-}
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE StandaloneDeriving  #-}
 
 module Lib where
 
-import qualified Data.Map.Lazy as Map
-import qualified Data.Set as Set
-import Debug.Trace
+import           Control.Exception   (assert)
+import qualified Data.Map.Lazy       as Map
+import           Data.Maybe
+import qualified Data.Set            as Set
+import           Debug.Trace
+import           System.Console.ANSI as AN
+import qualified Text.Show.Pretty    as Pr
+
+
+color :: Color -> String -> String
+color c str = AN.setSGRCode [AN.SetColor AN.Foreground AN.Vivid c] ++  str ++ AN.setSGRCode [AN.Reset]
+
 
 data PrimVal = PrimInt Int
              | PrimSym String
@@ -25,10 +33,17 @@ data Value =
   | Apply Value  Value
     deriving (Show, Eq)
 
+sym :: String -> Value
+sym str = Prim str $ PrimSym str
+
 
 data Context = Context { boundMap :: Map.Map Name Value
-                       , freeMap :: Set.Set Name
+                       , freeMap  :: Set.Set Name
                        } deriving (Show)
+
+data Prog = Prog Value Context
+instance Show Prog where
+  show (Prog value context) = color AN.Green (Pr.ppShow value) ++ "\n" ++ color AN.Black (Pr.ppShow context) ++ "\n"
 
 ctxLookup :: Context -> Name -> Maybe Value
 ctxLookup (Context boundMap _) name = Map.lookup name boundMap
@@ -39,80 +54,73 @@ insertBound name expr (Context boundMap freeMap) = Context boundMap' freeMap'
     boundMap' = Map.insert name expr boundMap
     freeMap' = Set.delete name freeMap
 
-insertFree :: Name -> Value -> Context -> Context
-insertFree name expr (Context boundMap freeMap) = Context boundMap freeMap
+insertFree :: Name -> Context -> Context
+insertFree name (Context boundMap freeMap) = Context boundMap' freeMap'
   where
-    insertFree (Context boundMap freeMap) name expr = Context boundMap freeMap
+    boundMap' = assert notfound boundMap
+      where
+        notfound = isNothing $ Map.lookup name boundMap
+    freeMap' = Set.insert name freeMap
 
-defaultContext :: Context
-defaultContext = Context (Map.fromList
-                           [
-                           ]) (Set.fromList [])
+deleteBound :: Name -> Context -> Context
+deleteBound name (Context boundMap freeMap) = Context boundMap' freeMap
+  where
+    boundMap' = Map.delete name boundMap
 
+
+-- |Interpretation
 
 -- TODO: make monadic for introspection
+defaultContext = Context (Map.fromList
+                          [
+                            ("I", Lambda "x" (Var "x"))
+                          , ("K", Lambda "x" (Lambda "y" (Var "x")))
+                          -- , ("S", Lambda "x" (Lambda "y" (Lambda "z" (Apply (Apply (Var "x") (Var "y")) (Apply (Var "x") (Var "z"))))))
+                          , ("Omega", omega)
+                          -- , ("Y", ycomb)
+                            -- , ("KIOmega", Apply (omega)
+                          ]) (Set.fromList [])
+  where
+    omega = Apply om om
+      where
+        om = Lambda "x" (Apply (Var "x") (Var "x"))
+    ycomb = Lambda "y" (Apply y' y')
+      where
+        y' = Lambda "x" (Apply (Var "y") (Apply (Var "x") (Var "x")))
 
-data Prog = Prog Value Context
+evalStrict :: Value -> Prog
+evalStrict input = eval $ Prog input defaultContext
+
 
 eval :: Prog -> Prog
 eval (Prog value ctx) = case value of
-
   -- Do Nothing
   Lambda name expr  -> Prog (Lambda name expr) ctx
   Prim name expr    -> Prog (Prim name expr)   ctx
-
   --  Step
   Var name          -> evalVar name
-  -- Apply f x         -> evalApply f x
+  Apply f x         -> evalApply f x
+
   where
     evalVar :: Name -> Prog
     evalVar name = f $ ctxLookup ctx name
       where
-        f (Just expr) = undefined
-        -- f Nothing     = error $ "Error! " ++ name ++ " not found!"
-        f Nothing     = Prog (Prim name (PrimSym name)) ctx
+        f (Just expr) = eval (Prog expr ctx)
+        f Nothing     = error $ "Error! " ++ name ++ " not found!"
+        -- f Nothing     = Prog (Prim name (PrimSym name)) $ insertFree name ctx
 
--- eval :: Value -> Context -> Value
--- eval input ctx = case input of
---   Var name         -> evalVar name
---   Lambda name expr ->  Lambda name expr
---   Const prim       ->  Const prim
---   Prim name expr    ->  Prim name expr
---   Free name        ->  Free name
---   Apply f x        -> evalApply f x
-
---   where
---     evalVar name = f $ lookupContext ctx name
---       where
---         f (Just expr) = expr
---         -- f Nothing     = error $ "Error! " ++ name ++ " not found!"
---         f Nothing     = Free name
-
---     evalApply !leftExpr !rightExpr = evalFirst (eval leftExpr ctx) (eval rightExpr ctx)
---       where
---         evalFirst (Lambda name expr) right = eval (traceShowId expr) $ bindInContext ctx name right
---         evalFirst l r = Apply l r
+    evalApply :: Value -> Value -> Prog
+    evalApply bound binder = f (eval (Prog bound ctx)) (eval (Prog binder ctx)) -- Strict semantics, since we require that right side be evaluated
+      where
+        f (Prog (Lambda name bound') ctx') (Prog binder' _) = cleanScope $ eval $ Prog bound' (insertBound name binder' ctx') -- Do something with ctx?
+          where
+             cleanScope (Prog result ctx'') = Prog result ctx''
 
 
--- -- testExpr = Apply (Lambda "x" (Var "x")) (Var "y")
--- testExpr = Apply (Lambda "x" (Var "x")) (Const $ PrimInt 2)
+-- |Should fail under Strict evaluation, but evaluate to I under Lazy evaluation
+kiomega :: Value
+kiomega = Apply (Apply (Var "K") (Var "I")) (Var "Omega")
 
--- icomb = Lambda "x" (Var "x")
--- kcomb = Lambda "x" (Lambda "y" (Var "x"))
--- scomb = Lambda "x" (Lambda "y" (Lambda "z" (Apply (Apply (Var "x") (Var "z")) (Apply (Var"y") (Var "y")))))
-
--- omega = Apply om om
---   where
---     om = Lambda "x" (Apply (Var "x") (Var "x"))
-
--- ycomb = Lambda "y" (Apply y y)
---   where
---     y = Lambda "x" (Apply (Var "y") (Apply (Var "x") (Var "x")))
-
--- -- kiomega = (Apply (Apply kcomb icomb) icomb)
--- -- komegai = (Apply (Apply kcomb icomb) icomb)
--- -- TODO: get KIOmega to work
--- testExpr1 = Apply icomb $ Free "hello"
-
--- eval' :: Value -> Value
--- eval' input = eval input defaultContext
+-- |Should fail under both Strict and Lazy evaluation
+komegai :: Value
+komegai = Apply (Apply (Var "K") (Var "Omega")) (Var "I")

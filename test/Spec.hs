@@ -2,16 +2,15 @@ import Lib
 import Test as T
 
 testEq :: Value -> Value -> Result
-testEq input expected = T.test (show input) (eval' input == expected)
+testEq input expected = T.test (show input) ((\(Prog value _) -> value ) (eval (Prog input defaultContext)) == expected)
 
 
 
 
 main :: IO ()
 main = T.runTests
-  [ testEq icomb icomb
-  , testEq scomb scomb
-  , testEq kcomb kcomb
-  , testEq (Apply icomb icomb)  icomb
-  , testEq (Apply icomb kcomb)  icomb
+  [ testEq (Var "I") (Var "I")
+  , testEq (Var "K") (Var "K")
+  , testEq (Var "S") (Var "S")
+  , testEq (Apply (Apply  (Var "K") (Var "I")) (Var "S")) (Var "I")
   ]

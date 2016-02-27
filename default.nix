@@ -4,14 +4,16 @@ let
 
   inherit (nixpkgs) pkgs;
 
-  f = { mkDerivation, ansi-terminal, base, containers, stdenv }:
+  f = { mkDerivation, ansi-terminal, base, containers, pretty-show
+      , stdenv
+      }:
       mkDerivation {
         pname = "untyped";
         version = "0.1.0.0";
         src = ./.;
         isLibrary = true;
         isExecutable = true;
-        libraryHaskellDepends = [ base containers ];
+        libraryHaskellDepends = [ base containers pretty-show ];
         executableHaskellDepends = [ base ];
         testHaskellDepends = [ ansi-terminal base ];
         homepage = "http://github.com/sleexyz/untyped#readme";
