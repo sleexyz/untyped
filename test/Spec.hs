@@ -9,8 +9,8 @@ testEq input expected = T.test (show input) ((\(Prog value _) -> value ) (eval (
 
 main :: IO ()
 main = T.runTests
-  [ testEq (Var "I") (Var "I")
-  , testEq (Var "K") (Var "K")
-  , testEq (Var "S") (Var "S")
-  , testEq (Apply (Apply  (Var "K") (Var "I")) (Var "S")) (Var "I")
+  [ testEq (Var "I") (Lambda "x" (Var "x"))
+  , testEq (Var "K") (Lambda "x" (Lambda "y" (Var "x")))
+  , testEq (Apply (Apply  (Var "K") (Var "I")) (Var "I")) (Lambda "x" (Var "x"))
+  , testEq (Apply (Apply (Apply  (Var "S") (Var "K")) (Var "K")) (Var "I")) (Lambda "x" (Var "x"))
   ]

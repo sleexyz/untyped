@@ -10,10 +10,12 @@ module Lib where
 import           Control.Exception   (assert)
 import qualified Data.Map.Lazy       as Map
 import           Data.Maybe
+import           Data.Monoid
 import qualified Data.Set            as Set
 import           Debug.Trace
 import           System.Console.ANSI as AN
 import qualified Text.Show.Pretty    as Pr
+import           Control.Applicative
 
 
 color :: Color -> String -> String
@@ -37,35 +39,38 @@ sym :: String -> Value
 sym str = Prim str $ PrimSym str
 
 
-data Context = Context { boundMap :: Map.Map Name Value
-                       , freeMap  :: Set.Set Name
-                       } deriving (Show)
+data Context = Context { global :: Map.Map Name Value
+                       , bound  :: Map.Map Name Value
+                       , free   :: Set.Set Name
+                       }
+instance Show Context where
+  show (Context global bmap fmap) = "\n-- bound: \n" ++ Pr.ppShow bmap ++ "\n\n-- free :\n" ++ Pr.ppShow fmap
 
 data Prog = Prog Value Context
 instance Show Prog where
-  show (Prog value context) = color AN.Green (Pr.ppShow value) ++ "\n" ++ color AN.Black (Pr.ppShow context) ++ "\n"
+  show (Prog value context) = color AN.Green ("\n" ++ Pr.ppShow value) ++ color AN.Black ("\n" ++ show context) ++ "\n"
 
 ctxLookup :: Context -> Name -> Maybe Value
-ctxLookup (Context boundMap _) name = Map.lookup name boundMap
+ctxLookup (Context global bound _) name = Map.lookup name global <|> Map.lookup name bound
 
 insertBound :: Name -> Value -> Context -> Context
-insertBound name expr (Context boundMap freeMap) = Context boundMap' freeMap'
+insertBound name expr (Context global bound free) = Context global bound' free'
   where
-    boundMap' = Map.insert name expr boundMap
-    freeMap' = Set.delete name freeMap
+    bound' = Map.insert name expr bound
+    free' = Set.delete name free
 
 insertFree :: Name -> Context -> Context
-insertFree name (Context boundMap freeMap) = Context boundMap' freeMap'
+insertFree name (Context global bound free) = Context global bound' free'
   where
-    boundMap' = assert notfound boundMap
+    bound' = assert notfound bound
       where
-        notfound = isNothing $ Map.lookup name boundMap
-    freeMap' = Set.insert name freeMap
+        notfound = isNothing $ Map.lookup name bound
+    free' = Set.insert name free
 
 deleteBound :: Name -> Context -> Context
-deleteBound name (Context boundMap freeMap) = Context boundMap' freeMap
+deleteBound name (Context global bound free) = Context global bound' free
   where
-    boundMap' = Map.delete name boundMap
+    bound' = Map.delete name bound
 
 
 -- |Interpretation
@@ -75,11 +80,12 @@ defaultContext = Context (Map.fromList
                           [
                             ("I", Lambda "x" (Var "x"))
                           , ("K", Lambda "x" (Lambda "y" (Var "x")))
-                          -- , ("S", Lambda "x" (Lambda "y" (Lambda "z" (Apply (Apply (Var "x") (Var "y")) (Apply (Var "x") (Var "z"))))))
+                          , ("S", Lambda "x" (Lambda "y" (Lambda "z" (Apply (Apply (Var "x") (Var "y")) (Apply (Var "x") (Var "z"))))))
                           , ("Omega", omega)
-                          -- , ("Y", ycomb)
-                            -- , ("KIOmega", Apply (omega)
-                          ]) (Set.fromList [])
+                          , ("Y", ycomb)
+                          , ("KIOmega", Apply (Apply (Var "K") (Var "I")) (omega)) -- should normalize under lazy but not strict semantics
+                          , ("KOmegaI", Apply (Apply (Var "K") (Var "I")) (omega)) -- should fail to normalize for both lazy and strict semantics
+                          ]) (Map.fromList []) (Set.fromList [])
   where
     omega = Apply om om
       where
@@ -115,12 +121,3 @@ eval (Prog value ctx) = case value of
         f (Prog (Lambda name bound') ctx') (Prog binder' _) = cleanScope $ eval $ Prog bound' (insertBound name binder' ctx') -- Do something with ctx?
           where
              cleanScope (Prog result ctx'') = Prog result ctx''
-
-
--- |Should fail under Strict evaluation, but evaluate to I under Lazy evaluation
-kiomega :: Value
-kiomega = Apply (Apply (Var "K") (Var "I")) (Var "Omega")
-
--- |Should fail under both Strict and Lazy evaluation
-komegai :: Value
-komegai = Apply (Apply (Var "K") (Var "Omega")) (Var "I")
